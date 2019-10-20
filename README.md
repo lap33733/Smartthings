@@ -1,3 +1,3 @@
 # Smartthings
 
-PUblic repository for smartthings
+Public repository for smartthings
