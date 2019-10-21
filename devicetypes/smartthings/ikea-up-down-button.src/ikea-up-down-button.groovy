@@ -12,13 +12,14 @@
  *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  *  for the specific language governing permissions and limitations under the License.
  *
+ *	Based on original smartthings ikea button dth
  */
 
 import groovy.json.JsonOutput
 import physicalgraph.zigbee.zcl.DataType
 
 metadata {
-	definition (name: "Ikea Up Down Button", namespace: "smartthings", author: "SmartThings", ocfDeviceType: "x.com.st.d.remotecontroller", mcdSync: true) {
+	definition (name: "Ikea Up Down Button", namespace: "smartthings", author: "Luis Pinto", ocfDeviceType: "x.com.st.d.remotecontroller", mcdSync: true) {
 		capability "Actuator"
 		capability "Battery"
 		capability "Button"
