@@ -17,7 +17,7 @@
 import physicalgraph.zigbee.zcl.DataType
 
 metadata {
-    definition(name: "Ikea Symfonisk Button", namespace: "smartthings", author: "Luis Pinto", ocfDeviceType: "oic.d.blind", mnmn: "SmartThings", vid: "generic-shade") {
+    definition(name: "Ikea Symfonisk Button", namespace: "smartthings", author: "Luis Pinto", ocfDeviceType: "x.com.st.d.remotecontroller", mnmn: "SmartThings") {
 		capability "Actuator"
 		capability "Switch"
 		capability "Button"
@@ -80,22 +80,14 @@ private sendButtonEvent(buttonNumber, buttonState) {
 	}
 }
 
-private Map getBatteryEvent(value) {
-	def result = [:]
-	result.value = value
-	result.name = 'battery'
-	result.descriptionText = "${device.displayName} battery was ${result.value}%"
-	return result
-}
-
 // Parse incoming device messages to generate events
 def parse(String description) {
-   log.debug "description is $description"
-
+	log.debug "description is $description"
+    
     def descMap = zigbee.parseDescriptionAsMap(description)
     log.debug descMap
     if (descMap.clusterInt == zigbee.POWER_CONFIGURATION_CLUSTER && descMap.attrInt == 0x0021) {
-        event = getBatteryEvent(zigbee.convertHexToInt(descMap.value))
+        sendEvent(name: "battery", value: zigbee.convertHexToInt(descMap.value))
     } else if (descMap && descMap.clusterInt == 0x0006) {
         if (descMap.commandInt == 0x02) {
         	log.debug "button 1 click"
@@ -212,23 +204,28 @@ def initialize() {
 }
 
 def close() {
+    sendEvent(name: "switch", value: "off")
     log.info "close()"
 }
 
 def open() {
+    sendEvent(name: "switch", value: "on")
     log.info "open()"
 }
 
 def off() {
+    sendEvent(name: "switch", value: "off")
     log.info "close()"
 }
 
 def on() {
+    sendEvent(name: "switch", value: "on")
     log.info "open()"
 }
 
 def setLevel(data) {
-
+    log.info "setLevel($data)"
+    sendEvent(name: "level", value: data)
 }
 
 
