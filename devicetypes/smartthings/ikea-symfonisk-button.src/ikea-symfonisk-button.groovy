@@ -32,15 +32,15 @@ metadata {
 
 
 	tiles(scale: 2) {
-		multiAttributeTile(name:"switch", type: "lighting", width: 6, height: 4, canChangeIcon: true){
+		multiAttributeTile(name:"switch", type: "generic", width: 6, height: 4, canChangeIcon: true){
 			tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
-				attributeState "on", label:'${name}', action:"switch.off", icon:"st.Electronics.electronics19", backgroundColor:"#00A0DC", nextState:"turningOff"
-				attributeState "off", label:'${name}', action:"switch.on", icon:"st.Electronics.electronics19", backgroundColor:"#ffffff", nextState:"turningOn"
-				attributeState "turningOn", label:'${name}', action:"switch.off", icon:"st.Electronics.electronics19", backgroundColor:"#00A0DC", nextState:"turningOff"
-				attributeState "turningOff", label:'${name}', action:"switch.on", icon:"st.Electronics.electronics19", backgroundColor:"#ffffff", nextState:"turningOn"
+				attributeState "on", label:'${name}', action:"switch.off", backgroundColor:"#00A0DC", nextState:"turningOff"
+				attributeState "off", label:'${name}', action:"switch.on", backgroundColor:"#ffffff", nextState:"turningOn"
+				attributeState "turningOn", label:'${name}', action:"switch.off", backgroundColor:"#00A0DC", nextState:"turningOff"
+				attributeState "turningOff", label:'${name}', action:"switch.on", backgroundColor:"#ffffff", nextState:"turningOn"
 			}
 			tileAttribute ("device.level", key: "SLIDER_CONTROL") {
-				attributeState "level", action:"switch level.setLevel"
+				attributeState "level", action:"switch level.setLevel", defaultState: true
 			}
 		}
         valueTile("battery", "device.battery", decoration: "flat", inactiveLabel: false, width: 1, height: 1) {
@@ -54,18 +54,6 @@ metadata {
 }
 
 private getCLUSTER_BATTERY_LEVEL() { 0x0001 }
-
-private List<Map> collectAttributes(Map descMap) {
-	List<Map> descMaps = new ArrayList<Map>()
-
-	descMaps.add(descMap)
-
-	if (descMap.additionalAttrs) {
-		descMaps.addAll(descMap.additionalAttrs)
-	}
-
-	return descMaps
-}
 
 private sendButtonEvent(buttonNumber, buttonState) {
 	def child = childDevices?.find { channelNumber(it.deviceNetworkId) == buttonNumber }
@@ -226,14 +214,6 @@ def on() {
 def setLevel(data) {
     log.info "setLevel($data)"
     sendEvent(name: "level", value: data)
-}
-
-
-/**
- * PING is used by Device-Watch in attempt to reach the Device
- * */
-def ping() {
-    return refresh()
 }
 
 def refresh() {
