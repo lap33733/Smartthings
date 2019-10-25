@@ -51,6 +51,12 @@ metadata {
 		details(["switch", "battery"])
 	}
     
+    preferences {
+        input "step", "number", title: "Move Step", description: "Adjust steps while moving rotary", default: 10,
+              range: "*..*", displayDuringSetup: false
+        input "useTimeStep", "boolean", title: "Use time step", description: "Use time steps instead of button report", default: false, displayDuringSetup: false
+
+    }
 }
 
 private getCLUSTER_BATTERY_LEVEL() { 0x0001 }
@@ -70,10 +76,10 @@ private sendButtonEvent(buttonNumber, buttonState) {
 
 // Parse incoming device messages to generate events
 def parse(String description) {
-	log.debug "description is $description"
+//	log.debug "description is $description"
     
     def descMap = zigbee.parseDescriptionAsMap(description)
-    log.debug descMap
+//    log.debug descMap
     if (descMap.clusterInt == zigbee.POWER_CONFIGURATION_CLUSTER && descMap.attrInt == 0x0021) {
         sendEvent(name: "battery", value: zigbee.convertHexToInt(descMap.value))
     } else if (descMap && descMap.clusterInt == 0x0006) {
@@ -89,31 +95,43 @@ def parse(String description) {
             {
                 log.debug "button 2 click"
   		        sendButtonEvent(2, "pushed")
-//                sendEvent(name: "button", value: "pushed", data: [buttonNumber: 2], isStateChange: true)
             } else if (descMap.data[0][1] == "1") {
                 log.debug "button 3 click"
   		        sendButtonEvent(3, "pushed")
-//                sendEvent(name: "button", value: "pushed", data: [buttonNumber: 3], isStateChange: true)
             }
 		} else if (descMap.commandInt == 0x01) {
             state.direction = descMap.data[0][1]
             state.moveStart = now()
+            log.debug "dimmer start moving"
+
         } else if (descMap.commandInt == 0x03) {
+        	def moveStep = 10
+            
+            if (step)
+            	moveStep = step
+                
             def moveStopped = now()
             def elapsed = moveStopped - state.moveStart
             def lastValue = device.currentValue("level")==null?0:device.currentValue("level")
             def dimmerValue = 0
-            log.debug "stop move"
-            if(state.direction == "1")
-            dimmerValue = lastValue - elapsed/50
-            else
-                dimmerValue = lastValue + elapsed/50
+            if(state.direction == "1") {
+            	if (useTimeStep == true)
+	            	dimmerValue = lastValue - elapsed/50
+                else
+					dimmerValue = lastValue - moveStep
+            } else {
+				if (useTimeStep == true)
+					dimmerValue = lastValue + elapsed/50
+                else
+					dimmerValue = lastValue + moveStep
+            }
+            log.debug "dimmer stopped moving, new dimmer value=$dimmerValue"
 
             if (dimmerValue > 100)
-            dimmerValue = 100           	
+	            dimmerValue = 100           	
 
             if (dimmerValue < 0)
-            dimmerValue = 0
+            	dimmerValue = 0
 
             sendEvent(name: "level", value: dimmerValue)
         }
