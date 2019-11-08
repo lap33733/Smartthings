@@ -14,6 +14,7 @@
  * Based on original smartthings blinds dth
  *
  */
+import groovy.json.JsonOutput
 import physicalgraph.zigbee.zcl.DataType
 
 metadata {
@@ -25,11 +26,10 @@ metadata {
 		capability "Configuration"
 		capability "Health Check"
 		capability "Battery"
-        capability "Refresh"
+		capability "Sensor"
 
-		fingerprint inClusters: "0000,0001,0003,0004", manufacturer: "IKEA of Sweden", model: "SYMFONISK Sound Controller"
-    }
-
+		fingerprint inClusters: "0000, 0001, 0003, 0020, 1000", outClusters: "0003, 0004, 0006, 0008, 0019, 1000", manufacturer: "IKEA of Sweden", model: "SYMFONISK Sound Controller", deviceJoinName: "IKEA TRÅDFRI Symfonisk"
+  }
 
 	tiles(scale: 2) {
 		multiAttributeTile(name:"switch", type: "generic", width: 6, height: 4, canChangeIcon: true){
@@ -55,11 +55,11 @@ metadata {
         input "step", "number", title: "Move Step", description: "Adjust steps while moving rotary", default: 10,
               range: "*..*", displayDuringSetup: false
         input "useTimeStep", "boolean", title: "Use time step", description: "Use time steps instead of button report", default: false, displayDuringSetup: false
-
     }
 }
 
 private getCLUSTER_BATTERY_LEVEL() { 0x0001 }
+private getBATTERY_VOLTAGE_ATTR() { 0x0021 }
 
 private sendButtonEvent(buttonNumber, buttonState) {
 	def child = childDevices?.find { channelNumber(it.deviceNetworkId) == buttonNumber }
@@ -76,11 +76,14 @@ private sendButtonEvent(buttonNumber, buttonState) {
 
 // Parse incoming device messages to generate events
 def parse(String description) {
-//	log.debug "description is $description"
+	log.debug "description is $description"
+    
+    def event = zigbee.getEvent(description)
+
+	log.debug "event is $event"
     
     def descMap = zigbee.parseDescriptionAsMap(description)
-//    log.debug descMap
-    if (descMap.clusterInt == zigbee.POWER_CONFIGURATION_CLUSTER && descMap.attrInt == 0x0021) {
+    if (descMap.clusterInt == zigbee.POWER_CONFIGURATION_CLUSTER && descMap.attrInt == BATTERY_VOLTAGE_ATTR) {
         sendEvent(name: "battery", value: zigbee.convertHexToInt(descMap.value))
     } else if (descMap && descMap.clusterInt == 0x0006) {
         if (descMap.commandInt == 0x02) {
@@ -135,6 +138,19 @@ def parse(String description) {
 
             sendEvent(name: "level", value: dimmerValue)
         }
+    } else if (isBindingTableMessage(description)) {
+    		def result = []
+            Integer groupAddr = getGroupAddrFromBindingTable(description)
+            if (groupAddr != null) {
+                List cmds = addHubToGroup(groupAddr)
+                result = cmds?.collect { new physicalgraph.device.HubAction(it) }
+            } else {
+                groupAddr = 0x0000
+                List cmds = addHubToGroup(groupAddr) +
+                        zigbee.command(CLUSTER_GROUPS, 0x00, "${zigbee.swapEndianHex(zigbee.convertToHexString(groupAddr, 4))} 00")
+                result = cmds?.collect { new physicalgraph.device.HubAction(it) }
+            }
+            return result
     } else {
         log.warn "DID NOT PARSE MESSAGE for description : $description"
         log.debug "${descMap}"
@@ -234,8 +250,14 @@ def setLevel(data) {
     sendEvent(name: "level", value: data)
 }
 
-def refresh() {
-    log.info "refresh()"
+def ping() {
+    log.info "ping()"
+}
+
+
+def installed() {
+	// These devices don't report regularly so they should only go OFFLINE when Hub is OFFLINE
+	sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "zigbee", scheme:"untracked"]), displayed: false)
 }
 
 def configure() {
@@ -245,7 +267,20 @@ def configure() {
     log.debug "Configuring Reporting and Bindings."
 
     def cmds
+    cmds = zigbee.configureReporting(zigbee.POWER_CONFIGURATION_CLUSTER, BATTERY_VOLTAGE_ATTR, DataType.UINT8, 30, 21600, 0x01) +
+			zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, BATTERY_VOLTAGE_ATTR) +
+            zigbee.addBinding(zigbee.ONOFF_CLUSTER) +
+            readDeviceBindingTable() // Need to read the binding table to see what group it's using
+            
+    cmds
+}
 
-    cmds = zigbee.levelConfig()
-    return refresh() + cmds
+private List addHubToGroup(Integer groupAddr) {
+    ["st cmd 0x0000 0x01 ${CLUSTER_GROUPS} 0x00 {${zigbee.swapEndianHex(zigbee.convertToHexString(groupAddr,4))} 00}",
+     "delay 200"]
+}
+
+private List readDeviceBindingTable() {
+    ["zdo mgmt-bind 0x${device.deviceNetworkId} 0",
+     "delay 200"]
 }
