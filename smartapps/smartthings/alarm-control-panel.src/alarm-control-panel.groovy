@@ -20,8 +20,8 @@ definition(
     author: "Luis Pinto",
     description: "Change SHM with a switch button after x seconds",
     category: "Convenience",
-    iconUrl: "https://s3.amazonaws.com/smartapp-icons/Meta/intruder_motion-presence.png",
-    iconX2Url: "https://s3.amazonaws.com/smartapp-icons/Meta/intruder_motion-presence@2x.png"
+    iconUrl: "http://cdn.device-icons.smartthings.com/Home/home3-icn.png",
+    iconX2Url: "http://cdn.device-icons.smartthings.com/Home/home3-icn@2x.png"
 )
 
 preferences {
