@@ -111,19 +111,29 @@ private void createChildButtonDevices(numberOfButtons) {
 
 	for (i in 1..numberOfButtons) {
 		log.debug "Creating child $i"
-		def supportedButtons = (isIkeaRemoteControl() && i == REMOTE_BUTTONS.MIDDLE) ? ["pushed"] : ["pushed", "held"]
-		def child = addChildDevice("Child Button", "${device.deviceNetworkId}:${i}", device.hubId,
-				[completedSetup: true, label: getButtonName(i),
-				 isComponent: true, componentName: "button$i", componentLabel: getButtonLabel(i)])
+        
+        def children = childDevices
+        def childDevice = children.find{"${device.deviceNetworkId}:${i}"}
+        
+        if (!childDevice)
+        {
+            def supportedButtons = (isIkeaRemoteControl() && i == REMOTE_BUTTONS.MIDDLE) ? ["pushed"] : ["pushed", "held"]
+            def child = addChildDevice("Child Button", "${device.deviceNetworkId}:${i}", device.hubId,
+                    [completedSetup: true, label: getButtonName(i),
+                     isComponent: true, componentName: "button$i", componentLabel: getButtonLabel(i)])
 
-		child.sendEvent(name: "supportedButtonValues", value: supportedButtons.encodeAsJSON(), displayed: false)
-		child.sendEvent(name: "numberOfButtons", value: 1, displayed: false)
-		child.sendEvent(name: "button", value: "pushed", data: [buttonNumber: 1], displayed: false)
+            child.sendEvent(name: "supportedButtonValues", value: supportedButtons.encodeAsJSON(), displayed: false)
+            child.sendEvent(name: "numberOfButtons", value: 1, displayed: false)
+            child.sendEvent(name: "button", value: "pushed", data: [buttonNumber: 1], displayed: false)
+        }
+        else
+        {
+        	log.debug "Children ${device.deviceNetworkId}:${i}, already exists, skiping..."
+        }
 	}
 }
 
-def manageButtons() {
-
+def getNumberOfButtons(){
 	def numberOfButtons = 1
 
 	if (isIkeaRemoteControl()) {
@@ -133,7 +143,12 @@ def manageButtons() {
 	} else if (isIkeaOpenCloseSwitch()) {
 		numberOfButtons = 3
 	}
-	log.debug numberOfButtons
+	return numberOfButtons
+}
+
+def manageButtons() {
+	def numberOfButtons = getNumberOfButtons()
+	log.debug "Configuring $numberOfButtons buttons"
 	if (numberOfButtons > 1) {
 		createChildButtonDevices(numberOfButtons)
 	}
@@ -161,10 +176,15 @@ def updated() {
 		}
 		state.oldLabel = device.label
 	}
-    if (!childDevices)
+	
+    //Allways refresh child buttons, in case someone deleted them or different handler has been selected
+	manageButtons()
+/*    if (!childDevices || childDevices != getNumberOfButtons())
     {
+    	log.debug "Child devices missing, creating them..."
 		manageButtons()
     }
+*/
 }
 
 def configure() {
@@ -312,7 +332,6 @@ private Map getButtonEvent(Map descMap) {
 		// Create old style
 		def descriptionText = "${getButtonName(buttonNumber)} was $buttonState"
 		result = [name: "button", value: buttonState, data: [buttonNumber: buttonNumber], descriptionText: descriptionText, isStateChange: true]
-
 		// Create and send component event
 		sendButtonEvent(buttonNumber, buttonState)
 	}
