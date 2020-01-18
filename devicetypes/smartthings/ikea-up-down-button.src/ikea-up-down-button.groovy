@@ -113,7 +113,7 @@ private void createChildButtonDevices(numberOfButtons) {
 		log.debug "Creating child $i"
         
         def children = childDevices
-        def childDevice = children.find{"${device.deviceNetworkId}:${i}"}
+        def childDevice = children.size >= i
         
         if (!childDevice)
         {
