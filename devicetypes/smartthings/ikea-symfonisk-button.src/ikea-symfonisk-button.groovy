@@ -128,13 +128,14 @@ def parse(String description) {
                 else
 					dimmerValue = lastValue + moveStep
             }
-            log.debug "dimmer stopped moving, new dimmer value=$dimmerValue"
 
             if (dimmerValue > 100)
 	            dimmerValue = 100           	
 
             if (dimmerValue < 0)
             	dimmerValue = 0
+
+            log.debug "dimmer stopped moving, new dimmer value=$dimmerValue"
 
             sendEvent(name: "level", value: dimmerValue)
         }
@@ -174,7 +175,6 @@ private getButtonName(buttonNum) {
 }
 
 private void createChildButtonDevices() {
-	
     def numberOfButtons = 3
     state.oldLabel = device.label
 
