@@ -36,9 +36,19 @@ preferences {
 	}
 
     section("Timers...") {
-      input "theTimeOpen", "time", title: "Time to execute Open", required: false
-      input "theTimeHalf", "time", title: "Time to execute 50%", required: false
-      input "theTimeClose", "time", title: "Time to execute Close", required: false
+        input "theTimeOpen", "time", title: "Time to execute Open", required: false
+        input "theTimeHalf", "time", title: "Time to execute 50%", required: false
+        input "theTimeClose", "time", title: "Time to execute Close", required: false
+	}
+    
+    section("Automation...") {
+    	input "sensor", "capability.temperatureMeasurement", title: "Sensor", required: false
+    	input "threshold", "number", title: "Temperature threshold", required: false
+        input "desiredTemperature", "number", title: "Desired Temperature", required: false
+        input "theTemperatureControlStart", "time", title: "Time to Start Automation", required: false
+        input "theTemperatureControlEnd", "time", title: "Time to End Automation", required: false
+        input "returnToOpen", "boolean", title: "Return To open position after automation", required: false
+        input "automationEnabled", "boolean", title: "Enable automation", required: false
 	}
     
 }
@@ -52,6 +62,11 @@ def installed()
 	subscribe(dimmers, "switch", dimmersEvent)
     subscribe(dimmers, "switch.on", dimmersEvent)
 	subscribe(dimmers, "switch.off", dimmersEvent)
+	subscribe(shades, "windowShade", windowShadeEvent)
+	if (sensor) {
+		subscribe(sensor, "temperature", temperatureHandler)
+	    setTemperature (sensor.currentTemperature)
+	}
     
     if (theTimeOpen != null && theTimeOpen != "")
 	    schedule(theTimeOpen, "handlerSchOpen")
@@ -59,6 +74,17 @@ def installed()
     	schedule(theTimeHalf, "handlerSchHalf")
     if (theTimeClose != null && theTimeClose != "")
 	    schedule(theTimeClose, "handlerSchClose")
+
+    if (automationEnabled == "true") {
+        if (theTemperatureControlStart != null && theTemperatureControlStart != "")
+            schedule(theTemperatureControlStart, "automationBeginFunction")    
+        if (theTemperatureControlEnd != null && theTemperatureControlEnd != "")
+            schedule(theTemperatureControlEnd, "automationEndFunction")    
+	}
+    state.defaultPosition = 0
+    log.info "Storing current position to return after automation, value is ${state.defaultPosition}"
+
+        
 }
 
 
@@ -69,15 +95,83 @@ def updated()
     installed()
 }
 
+def temperatureHandler(evt)
+{
+    setTemperature (evt.doubleValue)
+}
+
+def automationBeginFunction () {
+    if (automationEnabled == "true") {
+		state.defaultPosition = getLevel()
+	    log.info "Storing current position to return after automation, value is ${state.defaultPosition}"
+        return
+    }
+
+}
+
+def automationEndFunction () {
+    if (automationEnabled == "true") {
+        log.info "End of automation returning to open position, value ${state.defaultPosition}"
+		shades.setLevel(state.defaultPosition)
+    }
+
+}
+
+def setTemperature(currentTemp) {
+	log.info "automation is $automationEnabled and temperature is " + currentTemp
+
+    if (automationEnabled == "false") {
+        log.info "Automation not enabled, nothing to do"
+        return
+    }
+
+    if (theTemperatureControlStart && theTemperatureControlEnd) {
+        if(!timeOfDayIsBetween(theTemperatureControlStart, theTemperatureControlEnd, (new Date()), location.timeZone))
+        {
+			log.info "Out of time, nothing to do"
+            return
+        }
+    }
+
+	if (sensor && desiredTemperature) {
+        def difference = currentTemp - desiredTemperature
+        def percentage = 0;
+
+        if (difference > threshold)
+            difference = threshold
+        else if (difference < 0)
+        	difference = 0
+//            difference = -1*threshold
+
+        log.info "difference is " + difference
+
+        if (difference > 0) {
+//            percentage = 50 + difference * 100 / (2*threshold)
+            percentage = difference * 100 / threshold
+	        shades.setLevel(percentage)
+	        log.info "move curtains to " + percentage
+        } else {
+	        log.info "Temperature is bellow desired, nothing to do"
+        }
+
+//        shades.setLevel(percentage)
+
+	}
+}
+
+def windowShadeEvent (evt) {
+	log.debug "windowShadeEvent Event: ${evt.value}"
+	state.isWorking = evt.value == "opening" || evt.value == "closing"
+}
+
 def dimmersEvent(evt) {
-	//shades[0].currentValue("level")
 	log.info "switchSetLevelHandler Event: ${level}"
 	if (evt.value == "on") {
-    	shades.setLevel(100)
+    	shades.close()
 		return
     }
     if (evt.value == "off" ){
-    	shades.setLevel(0)
+    	shades.open()
 		return
     }
 	def level = evt.value.toFloat()
@@ -86,15 +180,18 @@ def dimmersEvent(evt) {
 }
 
 def handlerSchOpen(evt) {
-    shades.setLevel(0)
+    if (automationEnabled == "true")
+	    shades.open()
 }
 
 def handlerSchHalf(evt) {
-    shades.setLevel(50)
+    if (automationEnabled == "true")
+    	shades.setLevel(50)
 }
 
 def handlerSchClose(evt) {
-    shades.setLevel(100)
+    if (automationEnabled == "true")
+	    shades.close()
 }
 
 def buttonEventPause(evt) {
@@ -103,17 +200,18 @@ def buttonEventPause(evt) {
 }
 
 def buttonEventClose(evt) {
-	log.debug "Closing Shades: $evt"
-    
-    if (isWorking())
-    	shades.pause();
+	log.debug "Closing Shades"
+
+    if (isWorking()) {
+    	shades.pause()
+    }
     else if ((evt.value == "held" && !invertControl) || (evt.value == "pushed" && invertControl)) {
     	log.debug "button was held"
-        shades.setLevel(100)
+        shades.close()
   	} else if ((evt.value == "pushed" && !invertControl) || (evt.value == "held" && invertControl)) {
     	log.debug "button was pushed"
         if (getLevel() <100 && getLevel() >=75)
-            shades.setLevel(100)
+            shades.close()
         else if (getLevel() <75 && getLevel() >=50)
             shades.setLevel(75)
         else if (getLevel() <50 && getLevel() >=25)
@@ -125,17 +223,20 @@ def buttonEventClose(evt) {
 }
 
 def buttonEventOpen(evt) {
-	log.debug "Opening shades: $evt"
-   	if (isWorking())
+	log.debug "Opening shades:"
+
+   	if (isWorking()) {
     	shades.pause()
-    else if (switchesClose == null)
+    }
+    else if (switchesClose == null) {
 		if (getLevel() < 50)
-	        shades.setLevel(100)
+	        shades.close()
         else
-	        shades.setLevel(0)        	
+	        shades.open()
+    }
     else if ((evt.value == "held" && !invertControl) || (evt.value == "pushed" && invertControl)) {
     	log.debug "button was held"
-        shades.setLevel(0)
+        shades.open()
   	} else if ((evt.value == "pushed" && !invertControl) || (evt.value == "held" && invertControl)) {
         if (getLevel() <=100 && getLevel() >75)
             shades.setLevel(75)
@@ -144,13 +245,17 @@ def buttonEventOpen(evt) {
         else if (getLevel() <=50 && getLevel() >25)
             shades.setLevel(25)
         else if (getLevel() <=25 && getLevel() >0)
-            shades.setLevel(0)
+            shades.open()
     }
 }
 
 def isWorking(){
-	return false
-//	return (shades[0].currentState("windowShade").value == "opening" || shades[0].currentState("windowShade").value == "closing")
+	return state.isWorking
+/*	def isworking
+    isworking = shades[0].currentState("windowShade").value == "opening" || shades[0].currentState("windowShade").value == "closing"
+    log.debug "Is working: " + isworking
+    return isworking
+*/
 }
 
 def getLevel(){
