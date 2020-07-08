@@ -28,6 +28,7 @@ preferences {
 	section("Control Switch") {
 		input "theSwitch", "capability.switch",title:"Select a switch", required:false, multiple: true
 		input "secondsLater", "number", title: "Arm how many seconds later?", required:true
+		input "siren", "capability.alarm", title: "On this Siren", required: false
 	}
     section("Options for Arm") {
         input "stLanguageOn", "enum", title: "SmartThings Voice?", required: true, defaultValue: "en-US Salli", options: ["da-DK Naja","da-DK Mads","de-DE Marlene","de-DE Hans","en-US Salli","en-US Joey","en-AU Nicole","en-AU Russell","en-GB Amy","en-GB Brian","en-GB Emma","en-GB Gwyneth","en-GB Geraint","en-IN Raveena","en-US Chipmunk","en-US Eric","en-US Ivy","en-US Jennifer","en-US Justin","en-US Kendra","en-US Kimberly","es-ES Conchita","es-ES Enrique","es-US Penelope","es-US Miguel","fr-CA Chantal","fr-FR Celine","fr-FR Mathieu","is-IS Dora","is-IS Karl","it-IT Carla","it-IT Giorgio","nb-NO Liv","nl-NL Lotte","nl-NL Ruben","pl-PL Agnieszka","pl-PL Jacek","pl-PL Ewa","pl-PL Jan","pl-PL Maja","pt-BR Vitoria","pt-BR Ricardo","pt-PT Cristiano","pt-PT Ines","ro-RO Carmen","ru-RU Tatyana","ru-RU Maxim","sv-SE Astrid","tr-TR Filiz"]
@@ -39,6 +40,7 @@ preferences {
         input "sendPushOn", "bool", required: false, title: "Send Push Notification when switch is activated?"
         input "sendPushOnNow", "bool", required: false, title: "Send Push Notification when alarm is activated?"
         input "modeForArmed", "mode", title: "Change a mode", multiple: false, required:false
+        input "sendSirenOnNow", "bool", required: false, title: "Send Siren Notification when alarm is activated?"
 	}
     section("Options for disarm") {
         input "stLanguageOff", "enum", title: "SmartThings Voice?", required: true, defaultValue: "en-US Salli", options: ["da-DK Naja","da-DK Mads","de-DE Marlene","de-DE Hans","en-US Salli","en-US Joey","en-AU Nicole","en-AU Russell","en-GB Amy","en-GB Brian","en-GB Emma","en-GB Gwyneth","en-GB Geraint","en-IN Raveena","en-US Chipmunk","en-US Eric","en-US Ivy","en-US Jennifer","en-US Justin","en-US Kendra","en-US Kimberly","es-ES Conchita","es-ES Enrique","es-US Penelope","es-US Miguel","fr-CA Chantal","fr-FR Celine","fr-FR Mathieu","is-IS Dora","is-IS Karl","it-IT Carla","it-IT Giorgio","nb-NO Liv","nl-NL Lotte","nl-NL Ruben","pl-PL Agnieszka","pl-PL Jacek","pl-PL Ewa","pl-PL Jan","pl-PL Maja","pt-BR Vitoria","pt-BR Ricardo","pt-PT Cristiano","pt-PT Ines","ro-RO Carmen","ru-RU Tatyana","ru-RU Maxim","sv-SE Astrid","tr-TR Filiz"]
@@ -48,6 +50,7 @@ preferences {
         input "volumeOff", "number", title: "Temporarily change volume", description: "0-100%", required: false
         input "sendPushOff", "bool", required: false, title: "Send Push Notification also?"
         input "modeForDisarmed", "mode", title: "Change to mode", multiple: false, required:false
+        input "sendSirenOffNow", "bool", required: false, title: "Send Siren Notification when alarm is deactivated?"
 	}
    	section("Real Contacts"){
 		input "contacts", "capability.contactSensor", multiple: true, required: true
@@ -60,8 +63,9 @@ preferences {
     section("Optionaly play a message if SHM armed") {
         input "stLanguage", "enum", title: "SmartThings Voice?", required: true, defaultValue: "en-US Salli", options: ["da-DK Naja","da-DK Mads","de-DE Marlene","de-DE Hans","en-US Salli","en-US Joey","en-AU Nicole","en-AU Russell","en-GB Amy","en-GB Brian","en-GB Emma","en-GB Gwyneth","en-GB Geraint","en-IN Raveena","en-US Chipmunk","en-US Eric","en-US Ivy","en-US Jennifer","en-US Justin","en-US Kendra","en-US Kimberly","es-ES Conchita","es-ES Enrique","es-US Penelope","es-US Miguel","fr-CA Chantal","fr-FR Celine","fr-FR Mathieu","is-IS Dora","is-IS Karl","it-IT Carla","it-IT Giorgio","nb-NO Liv","nl-NL Lotte","nl-NL Ruben","pl-PL Agnieszka","pl-PL Jacek","pl-PL Ewa","pl-PL Jan","pl-PL Maja","pt-BR Vitoria","pt-BR Ricardo","pt-PT Cristiano","pt-PT Ines","ro-RO Carmen","ru-RU Tatyana","ru-RU Maxim","sv-SE Astrid","tr-TR Filiz"]
         input "message","text",title:"Play this message", required:false, multiple: false
-		input "sonos", "capability.musicPlayer", title: "On this Speaker player", required: true
+		input "sonos", "capability.musicPlayer", title: "On this Speaker player", required: false
         input "volume", "number", title: "Temporarily change volume", description: "0-100%", required: false
+        input "sendSirenArmedNotification", "bool", required: false, title: "Send Siren Notification if alarm is activated?"
 	} 
 }
 
@@ -92,13 +96,18 @@ def updated() {
 }
 
 def switchOffHandler(evt) {
-	log.debug "Switch ${theSwitch} turned: ${evt.value}"
+//	log.debug "Switch ${theSwitch} turned: ${evt.value}"
+    log.debug "Alarm was turned OFF"
+
+//    def status = location.currentState("alarmSystemStatus")?.value
+//	log.debug "SHM Status is ${status}"
     
-	def status = location.currentState("alarmSystemStatus")?.value
-    
-	log.debug "SHM Status is ${status}"
 	if (evt.value == "off"){
-		if (messageOff) {
+        if (siren && sendSirenOffNow)
+        {
+        	siren.BeepCode()
+        }
+		if (sonosOff && messageOff) {
         	if (sendPushOff) {
         		sendPush(messageOff)
         	}
@@ -121,14 +130,18 @@ def switchOffHandler(evt) {
 }
 
 def switchOnHandler(evt) {
-	log.debug "Switch ${theSwitch} turned: ${evt.value}"
+//	log.debug "Switch ${theSwitch} turned: ${evt.value}"
 	def delay = secondsLater
+    log.debug "Alarm was turned ON"
+//	def status = location.currentState("alarmSystemStatus")?.value
+//	log.debug "SHM status is ${status}"
     
-	def status = location.currentState("alarmSystemStatus")?.value
-    
-	log.debug "SHM status is ${status}"
 	if (evt.value == "on") {
-		if (messageOn) {
+    	if (siren && sendSirenOnNow)
+        {
+        	siren.BeepCode()
+        }
+		if (sonosOn && messageOn) {
         	if (sendPushOn) {
         		sendPush(messageOn)
         	}
@@ -137,42 +150,82 @@ def switchOnHandler(evt) {
 //			sonosOn.playTrack(state.sound.uri, state.sound.duration, volumeOn)
 
 			state.sound = textToSpeech(messageOn instanceof List ? messageOn[0] : messageOn, stLanguageOn.substring(6))
-	        sonosOn.playTrack(state.sound.uri, volumeOn)
-
+	        .playTrack(state.sound.uri, volumeOn)
 		}
         if (messageOnURL) {
 			state.sound = [uri: messageOnURL, duration: "10"]
 			sonosOff.playTrack(state.sound.uri, state.sound.duration, volumeOn)        
 		}
-
+		state.hasInformOpenElements = false
 		runIn(delay, turnOnAlarm)
 	}
 }
 
 def turnOnAlarm() {
-    if (messageOnNow) {
-        if (sendPushOnNow) {
-            sendPush(messageOnNow)
+ 	def currentState = theSwitch[0].currentState("switch")?.value
+// 	log.debug "Keypad Switch status is ${currentState}"
+    if (currentState == "on") {
+	    log.debug "Going to test if I can put alarm ON"
+
+        def delay = secondsLater
+        def isAnyOpen = false
+        contacts.each {
+//            log.debug "${it.name} status is ${it.contactState.value}"
+            if (it.contactState.value == "open") {
+                isAnyOpen = true
+            }
         }
-        log.debug "Playing message On Now"
+    
+        if (isAnyOpen) {
+            log.debug "There are still some open triggers, delaying alarm"
+            if (state.hasInformOpenElements == false && siren && sendSirenOnNow)
+            {
+                siren.BeepCode()
+                siren.BeepCode()
+            }
+        	if (state.hasInformOpenElements == false && sendPushOn) {
+        		sendPush("There are sensors opened can't turn alarm on")
+        	}
 
-        state.sound = textToSpeech(messageOnNow instanceof List ? messageOnNow[0] : messageOnNow, stLanguageOn.substring(6))
-        sonosOn.playTrack(state.sound.uri, volumeOn)
+			state.hasInformOpenElements = true
 
-//		state.sound = textToSpeech(messageOnNow instanceof List ? messageOnNow[0] : messageOnNow)
-//        sonosOn.playTrack(state.sound.uri, state.sound.duration, volumeOn)
+            runIn(delay, turnOnAlarm)
+            return
+        }
+        
+        if (siren && sendSirenOnNow)
+        {
+            siren.BeepCode()
+        }
+
+        if (sonosOn && messageOnNow) {
+            if (sendPushOnNow) {
+                sendPush(messageOnNow)
+            }
+            log.debug "Playing message On Now"
+
+            state.sound = textToSpeech(messageOnNow instanceof List ? messageOnNow[0] : messageOnNow, stLanguageOn.substring(6))
+            sonosOn.playTrack(state.sound.uri, volumeOn)
+
+    //		state.sound = textToSpeech(messageOnNow instanceof List ? messageOnNow[0] : messageOnNow)
+    //        sonosOn.playTrack(state.sound.uri, state.sound.duration, volumeOn)
+        }
+
+        sendLocationEvent(name: "alarmSystemStatus", value: "stay")
+        if (modeForArmed)
+            location.setMode(modeForArmed)
     }
-
-    sendLocationEvent(name: "alarmSystemStatus", value: "stay")
-    if (modeForArmed)
-		location.setMode(modeForArmed)
 }
 
 def contactHandler(evt) {
 	def delay = secondsLater
 	def status = location.currentState("alarmSystemStatus")?.value
 
-    if (message && status != "off") {
+    if (siren && sendSirenArmedNotification && status != "off")
+    {
+        siren.BeepCode()
+    }
+    if (sonos && message && status != "off") {
 		log.debug "Playing message"
         state.sound = textToSpeech(message instanceof List ? message[0] : message, stLanguage.substring(6))
         sonos.playTrackAndResume(state.sound.uri, volume)
