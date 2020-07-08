@@ -113,7 +113,7 @@ private void createChildButtonDevices(numberOfButtons) {
 		log.debug "Creating child $i"
         
         def children = childDevices
-        def childDevice = children.size >= i
+        def childDevice = children.find{"${device.deviceNetworkId}:${i}"}
         
         if (!childDevice)
         {
@@ -219,9 +219,10 @@ def parse(String description) {
 
 		def result = []
 		if (event) {
-			log.debug "Creating event: ${event}"
+			log.debug "Creating event from catchAll: ${event}"
 			result = createEvent(event)
 		} else if (isBindingTableMessage(description)) {
+			log.debug "This is a binding event"
 			Integer groupAddr = getGroupAddrFromBindingTable(description)
 			if (groupAddr != null) {
 				List cmds = addHubToGroup(groupAddr)
@@ -331,7 +332,7 @@ private Map getButtonEvent(Map descMap) {
 	if (buttonNumber != 0) {
 		// Create old style
 		def descriptionText = "${getButtonName(buttonNumber)} was $buttonState"
-		result = [name: "button", value: buttonState, data: [buttonNumber: buttonNumber], descriptionText: descriptionText, isStateChange: true]
+		result = [name: "button", value: buttonState, data: [buttonNumber: buttonNumber], descriptionText: descriptionText, isStateChange: true, displayed: false]
 		// Create and send component event
 		sendButtonEvent(buttonNumber, buttonState)
 	}
