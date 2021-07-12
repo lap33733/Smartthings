@@ -18,21 +18,24 @@ import groovy.json.JsonOutput
 import physicalgraph.zigbee.zcl.DataType
 
 metadata {
-    definition(name: "Ikea Window Shade", namespace: "smartthings", author: "Luis Pinto", ocfDeviceType: "oic.d.blind", mnmn: "SmartThings", vid: "generic-shade") {
+    definition(name: "Ikea Window Shade", namespace: "smartthings", author: "Luis Pinto", ocfDeviceType: "oic.d.blind", mnmn: "SmartThings", vid: "generic-shade-3") {
         capability "Actuator"
         capability "Configuration"
         capability "Refresh"
         capability "Window Shade"
+		capability "Window Shade Preset"
         capability "Health Check"
         capability "Switch Level"
         capability "Switch"
-		capability "Battery"        
-		capability "Window Shade Preset"
+		capability "Battery"
         
         command "pause"
 
-		fingerprint manufacturer: "IKEA of Sweden", inClusters: "0000,0001,0003,0004", model: "FYRTUR block-out roller blind"
-		fingerprint manufacturer: "IKEA of Sweden", model: "KADRILJ roller blind", deviceJoinName: "IKEA KADRILJ Blinds" // raw description 01 0104 0202 00 09 0000 0001 0003 0004 0005 0020 0102 1000 FC7C 02 0019 1000
+		fingerprint manufacturer: "IKEA of Sweden", model: "KADRILJ roller blind", deviceJoinName: "IKEA Window Treatment" // raw description 01 0104 0202 00 09 0000 0001 0003 0004 0005 0020 0102 1000 FC7C 02 0019 1000 //IKEA KADRILJ Blinds
+		fingerprint manufacturer: "IKEA of Sweden", model: "FYRTUR block-out roller blind", deviceJoinName: "IKEA Window Treatment" // raw description 01 0104 0202 01 09 0000 0001 0003 0004 0005 0020 0102 1000 FC7C 02 0019 1000 //IKEA FYRTUR Blinds
+
+//		fingerprint manufacturer: "IKEA of Sweden", inClusters: "0000,0001,0003,0004", model: "FYRTUR block-out roller blind"
+//		fingerprint manufacturer: "IKEA of Sweden", model: "KADRILJ roller blind", deviceJoinName: "IKEA KADRILJ Blinds" // raw description 01 0104 0202 00 09 0000 0001 0003 0004 0005 0020 0102 1000 FC7C 02 0019 1000
     }
     
     preferences {
@@ -42,12 +45,15 @@ metadata {
     tiles(scale: 2) {
         multiAttributeTile(name:"windowShade", type: "generic", width: 6, height: 4) {
             tileAttribute("device.windowShade", key: "PRIMARY_CONTROL") {
-                attributeState "open", label: 'Open', action: "close", icon: "http://www.ezex.co.kr/img/st/window_open.png", backgroundColor: "#00A0DC", nextState: "closing"
-                attributeState "closed", label: 'Closed', action: "open", icon: "http://www.ezex.co.kr/img/st/window_close.png", backgroundColor: "#ffffff", nextState: "opening"
-                attributeState "partially open", label: 'Partially open', action: "close", icon: "http://www.ezex.co.kr/img/st/window_open.png", backgroundColor: "#d45614", nextState: "closing"
-                attributeState "opening", label: 'Opening', action: "pause", icon: "http://www.ezex.co.kr/img/st/window_open.png", backgroundColor: "#00A0DC", nextState: "partially open"
-                attributeState "closing", label: 'Closing', action: "pause", icon: "http://www.ezex.co.kr/img/st/window_close.png", backgroundColor: "#ffffff", nextState: "partially open"
+ 				attributeState "open", label: 'Open', action: "close", icon: "st.shades.shade-open", backgroundColor: "#00A0DC", nextState: "closing"
+				attributeState "closed", label: 'Closed', action: "open", icon: "st.shades.shade-closed", backgroundColor: "#ffffff", nextState: "opening"
+				attributeState "partially open", label: 'Partially open', action: "close", icon: "st.shades.shade-open", backgroundColor: "#00A0DC", nextState: "closing"
+				attributeState "opening", label: 'Opening', action: "pause", icon: "st.shades.shade-opening", backgroundColor: "#00A0DC", nextState: "partially open"
+				attributeState "closing", label: 'Closing', action: "pause", icon: "st.shades.shade-closing", backgroundColor: "#ffffff", nextState: "partially open"
             }
+            tileAttribute ("device.windowShadeLevel", key: "SLIDER_CONTROL") {
+				attributeState "shadeLevel", action:"setLevel"
+			}
         }
         standardTile("contPause", "device.switch", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
 			state "pause", label:"", icon:'st.sonos.pause-btn', action:'pause', backgroundColor:"#cccccc"
@@ -61,15 +67,16 @@ metadata {
         valueTile("shadeLevel", "device.level", width: 4, height: 1) {
             state "level", label: 'Shade is ${currentValue}% down', defaultState: true
         }
-        valueTile("batteryLevel", "device.battery", width: 2, height: 2) {
-			state "battery", label:'${currentValue}% battery', unit:""
+       	valueTile("batteryLevel", "device.battery", width: 4, height: 1) {
+			state "battery", label:"${currentValue}% battery", unit:"%"
 		}
-        controlTile("levelSliderControl", "device.level", "slider", width:2, height: 1, inactiveLabel: false) {
+/*        controlTile("levelSliderControl", "device.level", "slider", width:2, height: 1, inactiveLabel: false) {
             state "level", action:"switch level.setLevel"
         }
-
-        main "windowShade"
-		details(["windowShade", "contPause", "presetPosition", "shadeLevel", "levelSliderControl", "refresh", "batteryLevel"])
+*/
+        main (["windowShade"])
+		details(["windowShade", "contPause", "presetPosition", "refresh", "batteryLevel"])
+//        details(["windowShade", "batteryLevel", "contPause", "presetPosition", "shadeLevel", "levelSliderControl", "refresh"])
 	}
 }
 
@@ -83,7 +90,6 @@ private getATTRIBUTE_POSITION_LIFT() { 0x0008 }
 private getATTRIBUTE_CURRENT_LEVEL() { 0x0000 }
 private getCOMMAND_MOVE_LEVEL_ONOFF() { 0x04 }
 private getBATTERY_PERCENTAGE_REMAINING() { 0x0021 }
-
 
 private List<Map> collectAttributes(Map descMap) {
 	List<Map> descMaps = new ArrayList<Map>()
@@ -103,6 +109,7 @@ def parse(String description) {
     if (description?.startsWith("read attr -")) {
         Map descMap = zigbee.parseDescriptionAsMap(description)
         if (isBindingTableMessage(description)) {
+		    log.trace "BindingTableMessage"
 			parseBindingTableMessage(description)
 		} else if (supportsLiftPercentage() && descMap?.clusterInt == CLUSTER_WINDOW_COVERING && descMap.value) {
             log.trace "attr: ${descMap?.attrInt}, value: ${descMap?.value}, descValue: ${Integer.parseInt(descMap.value, 16)}, ${device.getDataValue("model")}"
@@ -113,18 +120,31 @@ def parse(String description) {
                 levelEventHandler(newLevel)
             }
         } else if (!supportsLiftPercentage() && descMap?.clusterInt == zigbee.LEVEL_CONTROL_CLUSTER && descMap.value) {
+		    log.trace "Doesn't support lift message"
             def valueInt = Math.round((zigbee.convertHexToInt(descMap.value)) / 255 * 100)
 
             levelEventHandler(valueInt)
         } else if (reportsBatteryPercentage() && descMap?.clusterInt == zigbee.POWER_CONFIGURATION_CLUSTER && zigbee.convertHexToInt(descMap?.attrId) == BATTERY_PERCENTAGE_REMAINING && descMap.value) {
+		    log.trace "Just to report battery"
 			def batteryLevel = zigbee.convertHexToInt(descMap.value)
 			batteryPercentageEventHandler(batteryLevel)
 																				  
-		}
+		} 
 /*        if (descMap?.clusterInt == CLUSTER_BATTERY_LEVEL && descMap.value) {
             log.debug "attr: ${descMap?.attrInt}, value: ${descMap?.value}, descValue: ${Integer.parseInt(descMap.value, 16)}"
             sendEvent(name: "battery", value: Integer.parseInt(descMap.value, 16))
         } */
+    } else if (description.startsWith("catchall: 0104 0102 01 01 0000 00 ") && description.endsWith (" 00 00 0000 0B 01 0100")) {
+        log.debug "closed"
+        sendEvent(name: "windowShade", value: "closed")
+    } else if (description.startsWith("catchall: 0104 0102 01 01 0000 00 ") && description.endsWith (" 00 00 0000 0B 01 0500")) {
+        log.debug "partially open"
+        sendEvent(name: "windowShade", value: "partially open")
+    } else if (description.startsWith("catchall: 0104 0102 01 01 0000 00 ") && description.endsWith (" 00 00 0000 0B 01 0000")) {
+        log.debug "open"
+        sendEvent(name: "windowShade", value: "open")
+    } else {
+        log.debug "Dont know what to do with this"
     }
 }
 
@@ -192,6 +212,9 @@ def setLevel(data, rate = null) {
     log.info "setLevel($data)"
     def cmd
     def valueInt = data.toInteger() 
+
+	sendEvent(name: "level", value: valueInt)
+
     if (supportsLiftPercentage()) {
 //        cmd = zigbee.command(CLUSTER_WINDOW_COVERING, COMMAND_GOTO_LIFT_PERCENTAGE, zigbee.convertToHexString(0 , 2))
 		if (valueInt == 100) {
@@ -214,7 +237,11 @@ def setLevel(data, rate = null) {
 
 def pause() {
     log.info "pause()"
-    def level = device.currentValue("level")
+//    def level = device.currentValue("level")
+    // If the window shade isn't moving when we receive a pause() command then just echo back the current state for the mobile client.
+	if (device.currentValue("windowShade") != "opening" && device.currentValue("windowShade") != "closing") {
+		sendEvent(name: "windowShade", value: device.currentValue("windowShade"), isStateChange: true, displayed: false)
+	}
     zigbee.command(CLUSTER_WINDOW_COVERING, COMMAND_PAUSE)
 }
 

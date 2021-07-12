@@ -31,31 +31,30 @@ metadata {
 		fingerprint inClusters: "0000, 0001, 0003, 0020, 1000", outClusters: "0003, 0004, 0006, 0008, 0019, 1000", manufacturer: "IKEA of Sweden", model: "SYMFONISK Sound Controller", deviceJoinName: "IKEA TRÅDFRI Symfonisk"
   }
 
-    tiles(scale: 2) {
-        multiAttributeTile(name:"switch", type: "generic", width: 6, height: 4, canChangeIcon: true){
-            tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
-                attributeState "on", label:'${name}', action:"switch.off", backgroundColor:"#00A0DC", nextState:"turningOff"
-                attributeState "off", label:'${name}', action:"switch.on", backgroundColor:"#ffffff", nextState:"turningOn"
-                attributeState "turningOn", label:'${name}', action:"switch.off", backgroundColor:"#00A0DC", nextState:"turningOff"
-                attributeState "turningOff", label:'${name}', action:"switch.on", backgroundColor:"#ffffff", nextState:"turningOn"
-            }
-            tileAttribute ("device.level", key: "SLIDER_CONTROL") {
-                attributeState "level", action:"switch level.setLevel", defaultState: true
-            }
-        }
+	tiles(scale: 2) {
+		multiAttributeTile(name:"switch", type: "generic", width: 6, height: 4, canChangeIcon: true){
+			tileAttribute ("device.switch", key: "PRIMARY_CONTROL") {
+				attributeState "on", label:'${name}', action:"switch.off", backgroundColor:"#00A0DC", nextState:"turningOff"
+				attributeState "off", label:'${name}', action:"switch.on", backgroundColor:"#ffffff", nextState:"turningOn"
+				attributeState "turningOn", label:'${name}', action:"switch.off", backgroundColor:"#00A0DC", nextState:"turningOff"
+				attributeState "turningOff", label:'${name}', action:"switch.on", backgroundColor:"#ffffff", nextState:"turningOn"
+			}
+			tileAttribute ("device.level", key: "SLIDER_CONTROL") {
+				attributeState "level", action:"switch level.setLevel", defaultState: true
+			}
+		}
         valueTile("battery", "device.battery", decoration: "flat", inactiveLabel: false, width: 1, height: 1) {
-            state "battery", label:'${currentValue}% battery', unit:""
-        }
+			state "battery", label:'${currentValue}% battery', unit:""
+		}
 
-        main "switch"
-        details(["switch", "battery"])
-    }
+		main "switch"
+		details(["switch", "battery"])
+	}
     
     preferences {
         input "step", "number", title: "Move Step", description: "Adjust steps while moving rotary", default: 10,
               range: "*..*", displayDuringSetup: false
-        input "debounceTime", "number", title: "Debounce timer", description: "debounce events with millisecons", default: 5,
-              range: "*..*", displayDuringSetup: false
+        input "useTimeStep", "boolean", title: "Use time step", description: "Use time steps instead of button report", default: false, displayDuringSetup: false
     }
 }
 
@@ -63,54 +62,85 @@ private getCLUSTER_BATTERY_LEVEL() { 0x0001 }
 private getBATTERY_VOLTAGE_ATTR() { 0x0021 }
 
 private sendButtonEvent(buttonNumber, buttonState) {
-    def child = childDevices?.find { channelNumber(it.deviceNetworkId) == buttonNumber }
+	def child = childDevices?.find { channelNumber(it.deviceNetworkId) == buttonNumber }
 
-    if (child) {
-        def descriptionText = "$child.displayName was $buttonState" // TODO: Verify if this is needed, and if capability template already has it handled
-        child?.sendEvent([name: "button", value: buttonState, data: [buttonNumber: 1], descriptionText: descriptionText, isStateChange: true])
+	if (child) {
+		def descriptionText = "$child.displayName was $buttonState" // TODO: Verify if this is needed, and if capability template already has it handled
+		child?.sendEvent([name: "button", value: buttonState, data: [buttonNumber: 1], descriptionText: descriptionText, isStateChange: true])
         log.debug "$child button click"
 
-    } else {
-        log.debug "Child device $buttonNumber not found!"
-    }
+	} else {
+		log.debug "Child device $buttonNumber not found!"
+	}
 }
 
 // Parse incoming device messages to generate events
 def parse(String description) {
-    log.debug "description is $description"
+	log.debug "description is $description"
+    
     def event = zigbee.getEvent(description)
-    state.descriptionPrev = state.description
 
+	log.debug "event is $event"
+    
     def descMap = zigbee.parseDescriptionAsMap(description)
     if (descMap.clusterInt == zigbee.POWER_CONFIGURATION_CLUSTER && descMap.attrInt == BATTERY_VOLTAGE_ATTR) {
         sendEvent(name: "battery", value: zigbee.convertHexToInt(descMap.value))
     } else if (descMap && descMap.clusterInt == 0x0006) {
         if (descMap.commandInt == 0x02) {
-            log.debug "button 1 click"
+        	log.debug "button 1 click"
             sendButtonEvent(1, "pushed")
             sendEvent(name: "switch", value: device.currentValue("switch") == "on" ? "off" : "on")
         }
     } else if (descMap && descMap.clusterInt == 0x0008) {
         def currentLevel = device.currentValue("level") as Integer ?: 0
         if (descMap.commandInt == 0x02) {
-            if (descMap.data[0][1] == "0")
+        	if (descMap.data[0][1] == "0")
             {
                 log.debug "button 2 click"
-                  sendButtonEvent(2, "pushed")
+  		        sendButtonEvent(2, "pushed")
             } else if (descMap.data[0][1] == "1") {
                 log.debug "button 3 click"
-                  sendButtonEvent(3, "pushed")
+  		        sendButtonEvent(3, "pushed")
             }
-        } else if (descMap.commandInt == 0x01) {
+		} else if (descMap.commandInt == 0x01) {
             state.direction = descMap.data[0][1]
             state.moveStart = now()
             log.debug "dimmer start moving"
-            dim(true)
+
         } else if (descMap.commandInt == 0x03) {
-            dim(false)
+        	def moveStep = 10
+            
+            if (step)
+            	moveStep = step
+                
+            def moveStopped = now()
+            def elapsed = moveStopped - state.moveStart
+            def lastValue = device.currentValue("level")==null?0:device.currentValue("level")
+            def dimmerValue = 0
+            if(state.direction == "1") {
+            	if (useTimeStep == true)
+	            	dimmerValue = lastValue - elapsed/50
+                else
+					dimmerValue = lastValue - moveStep
+            } else {
+				if (useTimeStep == true)
+					dimmerValue = lastValue + elapsed/50
+                else
+					dimmerValue = lastValue + moveStep
+            }
+
+            if (dimmerValue > 100)
+	            dimmerValue = 100           	
+
+            if (dimmerValue < 0)
+            	dimmerValue = 0
+
+            log.debug "dimmer stopped moving, new dimmer value=$dimmerValue"
+
+            sendEvent(name: "level", value: dimmerValue)
         }
     } else if (isBindingTableMessage(description)) {
-            def result = []
+    		def result = []
             Integer groupAddr = getGroupAddrFromBindingTable(description)
             if (groupAddr != null) {
                 List cmds = addHubToGroup(groupAddr)
@@ -126,77 +156,41 @@ def parse(String description) {
         log.warn "DID NOT PARSE MESSAGE for description : $description"
         log.debug "${descMap}"
     }
-    
-}
-
-def dim(repeat=false) {
-    def moveStep = 10
-
-    if (step)
-        moveStep = step
-    def multiplier = 10
-    def moveStopped = now()
-    def elapsed = moveStopped - state.moveStart
-    def lastValue = device.currentValue("level")==null?0:device.currentValue("level")
-    def dimmerValue = 0
-
-    if(state.direction == "1") {
-        dimmerValue = Math.round(lastValue - (elapsed/50*(moveStep/multiplier)))
-    } else {
-        dimmerValue = Math.round(lastValue + (elapsed/50*(moveStep/multiplier)))
-    }
-
-    if (dimmerValue > 100)
-        dimmerValue = 100               
-
-    if (dimmerValue < 0)
-        dimmerValue = 0
-    
-    log.debug "dimmer stopped moving, new dimmer value=$dimmerValue"
-    setLevel(dimmerValue)
-    
-    if (dimmerValue != 100 && dimmerValue != 0 && repeat) {
-      def runTime = new Date(now() + debounceTime)
-      runOnce(runTime, reParse, [overwrite: true])
-    }
-}
-
-public def reParse(){
-    parse(state.descriptionPrev)
+	
 }
 
 private getREMOTE_BUTTONS() {
-    [PLAY:1,
-     NEXT:2,
-     PREVIOUS:3]
+	[PLAY:1,
+	 NEXT:2,
+	 PREVIOUS:3]
 }
 
 private getButtonLabel(buttonNum) {
-    def label = "Button ${buttonNum}"
-    return label
+	def label = "Button ${buttonNum}"
+	return label
 }
 
 private getButtonName(buttonNum) {
-    return "${device.displayName} " + getButtonLabel(buttonNum)
+	return "${device.displayName} " + getButtonLabel(buttonNum)
 }
 
 private void createChildButtonDevices() {
     def numberOfButtons = 3
     state.oldLabel = device.label
 
-    log.debug "Creating $numberOfButtons children"
+	log.debug "Creating $numberOfButtons children"
 
-    for (i in 1..numberOfButtons) {
-        log.debug "Creating child $i"
-        def supportedButtons = ["pushed"]
-        def child = addChildDevice("Child Button", "${device.deviceNetworkId}:${i}", device.hubId,
-                [completedSetup: true, label: getButtonName(i),
-                 isComponent: true, componentName: "button$i", componentLabel: getButtonLabel(i)])
+	for (i in 1..numberOfButtons) {
+		log.debug "Creating child $i"
+		def supportedButtons = ["pushed"]
+		def child = addChildDevice("Child Button", "${device.deviceNetworkId}:${i}", device.hubId,
+				[completedSetup: true, label: getButtonName(i),
+				 isComponent: true, componentName: "button$i", componentLabel: getButtonLabel(i)])
 
-        child.sendEvent(name: "supportedButtonValues", value: supportedButtons.encodeAsJSON(), displayed: false)
-        child.sendEvent(name: "numberOfButtons", value: 1, displayed: false)
-        child.sendEvent(name: "button", value: "pushed", data: [buttonNumber: 1], displayed: false)
-    }
+		child.sendEvent(name: "supportedButtonValues", value: supportedButtons.encodeAsJSON(), displayed: false)
+		child.sendEvent(name: "numberOfButtons", value: 1, displayed: false)
+		child.sendEvent(name: "button", value: "pushed", data: [buttonNumber: 1], displayed: false)
+	}
 }
 
 def manageButtons() {
@@ -204,7 +198,7 @@ def manageButtons() {
 }
 
 private channelNumber(String dni) {
-    dni.split(":")[-1] as Integer
+	dni.split(":")[-1] as Integer
 }
 
 def updated() {
@@ -213,15 +207,15 @@ def updated() {
     state.moveStart = now()
     
     if (childDevices && device.label != state.oldLabel) {
-        childDevices.each {
-            def newLabel = getButtonName(channelNumber(it.deviceNetworkId))
-            it.setLabel(newLabel)
-        }
-        state.oldLabel = device.label
-    }
+		childDevices.each {
+			def newLabel = getButtonName(channelNumber(it.deviceNetworkId))
+			it.setLabel(newLabel)
+		}
+		state.oldLabel = device.label
+	}
     if (!childDevices)
     {
-        manageButtons()
+		manageButtons()
     }
 }
 
@@ -262,8 +256,8 @@ def ping() {
 
 
 def installed() {
-    // These devices don't report regularly so they should only go OFFLINE when Hub is OFFLINE
-    sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "zigbee", scheme:"untracked"]), displayed: false)
+	// These devices don't report regularly so they should only go OFFLINE when Hub is OFFLINE
+	sendEvent(name: "DeviceWatch-Enroll", value: JsonOutput.toJson([protocol: "zigbee", scheme:"untracked"]), displayed: false)
 }
 
 def configure() {
@@ -274,7 +268,7 @@ def configure() {
 
     def cmds
     cmds = zigbee.configureReporting(zigbee.POWER_CONFIGURATION_CLUSTER, BATTERY_VOLTAGE_ATTR, DataType.UINT8, 30, 21600, 0x01) +
-            zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, BATTERY_VOLTAGE_ATTR) +
+			zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, BATTERY_VOLTAGE_ATTR) +
             zigbee.addBinding(zigbee.ONOFF_CLUSTER) +
             readDeviceBindingTable() // Need to read the binding table to see what group it's using
             

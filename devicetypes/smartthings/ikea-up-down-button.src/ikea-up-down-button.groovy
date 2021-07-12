@@ -112,11 +112,32 @@ private void createChildButtonDevices(numberOfButtons) {
 	for (i in 1..numberOfButtons) {
 		log.debug "Creating child $i"
         
+        def deviceToFind = "${device.deviceNetworkId}:${i}"
         def children = childDevices
-        def childDevice = children.find{"${device.deviceNetworkId}:${i}"}
-        
-        if (!childDevice)
+        log.debug "Trying to find Child $deviceToFind"
+        def childDevice = children.find{deviceToFind}
+        log.debug "$childDevice"
+        try
         {
+//	        deleteChildDevice("${device.deviceNetworkId}:${i}")
+	        log.debug "Creating Child Device"
+            def supportedButtons = (isIkeaRemoteControl() && i == REMOTE_BUTTONS.MIDDLE) ? ["pushed"] : ["pushed", "held"]
+            
+            def child = addChildDevice("Child Button", "${device.deviceNetworkId}:${i}", device.hubId,
+                    [completedSetup: true, label: getButtonName(i),
+                     isComponent: true, componentName: "button$i", componentLabel: getButtonLabel(i)])
+	        log.debug "Child Device created: $child"
+
+            child.sendEvent(name: "supportedButtonValues", value: supportedButtons.encodeAsJSON(), displayed: false)
+            child.sendEvent(name: "numberOfButtons", value: 1, displayed: false)
+            child.sendEvent(name: "button", value: "pushed", data: [buttonNumber: 1], displayed: false)
+        } catch (e) {
+            log.debug "Children ${device.deviceNetworkId}:${i}, already exists, skiping..."	
+        }
+  
+/*        if (!childDevice)
+        {
+	        log.debug "Creating Child Device"
             def supportedButtons = (isIkeaRemoteControl() && i == REMOTE_BUTTONS.MIDDLE) ? ["pushed"] : ["pushed", "held"]
             def child = addChildDevice("Child Button", "${device.deviceNetworkId}:${i}", device.hubId,
                     [completedSetup: true, label: getButtonName(i),
@@ -130,6 +151,7 @@ private void createChildButtonDevices(numberOfButtons) {
         {
         	log.debug "Children ${device.deviceNetworkId}:${i}, already exists, skiping..."
         }
+*/
 	}
 }
 
@@ -143,12 +165,15 @@ def getNumberOfButtons(){
 	} else if (isIkeaOpenCloseSwitch()) {
 		numberOfButtons = 3
 	}
+	
+    log.debug "There are $numberOfButtons buttons reported"
+    
 	return numberOfButtons
 }
 
 def manageButtons() {
 	def numberOfButtons = getNumberOfButtons()
-	log.debug "Configuring $numberOfButtons buttons"
+	log.debug "Configuring " + numberOfButtons +" buttons"
 	if (numberOfButtons > 1) {
 		createChildButtonDevices(numberOfButtons)
 	}
@@ -178,6 +203,7 @@ def updated() {
 	}
 	
     //Allways refresh child buttons, in case someone deleted them or different handler has been selected
+   	log.debug "Testing Child devices"
 	manageButtons()
 /*    if (!childDevices || childDevices != getNumberOfButtons())
     {
@@ -196,6 +222,7 @@ def configure() {
 			readDeviceBindingTable() // Need to read the binding table to see what group it's using
 
 	cmds
+   
 }
 
 def parse(String description) {
